@@ -117,3 +117,4 @@ else:
 
 with open(STATE_FILE, "w", encoding="utf-8") as f:
     json.dump(posts, f, ensure_ascii=False, indent=2)
+    send_telegram("🔔 KICPA 알림 테스트 성공!")
