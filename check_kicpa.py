@@ -2,13 +2,38 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import re
 
 URL = "https://www.kicpa.or.kr/home/jobOffrSrchNewGnrl/list.face"
 STATE_FILE = "last_seen.json"
 
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
 headers = {
     "User-Agent": "Mozilla/5.0"
 }
+
+def send_telegram(message):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("텔레그램 설정이 없습니다.")
+        return
+
+    telegram_url = (
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    )
+
+    response = requests.post(
+        telegram_url,
+        data={
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message
+        },
+        timeout=20
+    )
+
+    response.raise_for_status()
+
 
 response = requests.get(URL, headers=headers, timeout=20)
 response.raise_for_status()
@@ -17,7 +42,6 @@ soup = BeautifulSoup(response.text, "html.parser")
 
 posts = []
 
-# 게시판 행 단위로 읽기
 for row in soup.find_all("tr"):
     cells = row.find_all("td")
 
@@ -38,27 +62,17 @@ for row in soup.find_all("tr"):
     href = link.get("href", "")
     onclick = link.get("onclick", "")
 
-    post_id = None
-
-    # href 또는 onclick 안에서 게시글 ID 추출
-    import re
-
-    text_to_search = href + " " + onclick
-
-    match = re.search(r"(\d{10,})", text_to_search)
+    match = re.search(r"(\d{10,})", href + " " + onclick)
 
     if match:
         post_id = match.group(1)
-
-    if post_id:
         post_url = (
             "https://www.kicpa.or.kr"
             "/home/jobOffrSrchNewGnrl/detail.face"
             f"?ijIdNum={post_id}"
         )
     else:
-        # ID를 못 잡아도 제목 기준으로 새 글 감지는 가능하게 처리
-        post_url = title
+        post_url = URL
 
     posts.append({
         "title": title,
@@ -87,11 +101,16 @@ if not previous:
     print("첫 실행입니다. 현재 게시글을 기준점으로 저장합니다.")
 
 elif new_posts:
-    print("새로운 KICPA 수습CPA 채용공고가 있습니다!")
+    print(f"새로운 공고 {len(new_posts)}개 발견")
 
     for post in new_posts:
-        print("제목:", post["title"])
-        print("링크:", post["url"])
+        message = (
+            "🔔 KICPA 신규 수습CPA 공고\n\n"
+            f"{post['title']}\n\n"
+            f"{post['url']}"
+        )
+
+        send_telegram(message)
 
 else:
     print("새로운 공고가 없습니다.")
